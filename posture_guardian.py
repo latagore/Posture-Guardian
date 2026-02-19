@@ -312,15 +312,15 @@ class PostureGuardian:
                     # Collect specific issues (only for enabled checks)
                     issues = []
                     if c['shoulders']['enabled'] and shoulder_diff > c['shoulders']['threshold']:
-                        issues.append("Uneven shoulders")
+                        issues.append("Shoulders tilted")
                     if c['neck']['enabled'] and neck_diff > c['neck']['threshold']:
-                        issues.append("Neck strain")
+                        issues.append("Neck angled")
                     if c['head_forward']['enabled'] and lean_diff > lean_thresh:
-                        issues.append("Leaning toward screen")
+                        issues.append("Too close to screen")
                     if c['torso']['enabled'] and torso_diff > c['torso']['threshold']:
-                        issues.append("Torso leaning forward")
+                        issues.append("Torso tilting")
                     if c['spine']['enabled'] and vert_ratio < (1 - spine_thresh / 100):
-                        issues.append("Spine slouching")
+                        issues.append("Slouching")
 
                     if issues:
                         self.posture_issues = issues
@@ -462,19 +462,12 @@ class PostureGuardian:
             if hint:
                 tk.Label(row, text=hint, bg='#667eea', fg='#c0c8f0',
                          font=('Helvetica', 9)).pack(side='left', padx=8)
-            return val_label
+            return val_label, row
 
-        self.dur_value = make_setting_row(
-            settings_frame, "Alert Duration:", f"{self.alert_duration}s",
-            self.decrease_duration, self.increase_duration, "(how long overlay shows)")
-        self.delay_value = make_setting_row(
-            settings_frame, "Alert Delay:", f"{self.alert_delay}s",
-            self.decrease_delay, self.increase_delay, "(wait before triggering)")
-
-        # Alert type toggle
+        # Notification type
         type_frame = tk.Frame(settings_frame, bg='#667eea')
         type_frame.pack(fill='x', pady=6)
-        tk.Label(type_frame, text="Alert Type:", bg='#667eea', fg='white',
+        tk.Label(type_frame, text="Notification:", bg='#667eea', fg='white',
                  font=('Helvetica', 11)).pack(side='left')
         self.alert_type_label = tk.Label(
             type_frame, text=self.alert_type.capitalize(), bg='#667eea', fg='white',
@@ -485,6 +478,17 @@ class PostureGuardian:
                   cursor='hand2').pack(side='left', padx=2)
         tk.Label(type_frame, text="(sound / overlay popup)", bg='#667eea',
                  fg='#c0c8f0', font=('Helvetica', 9)).pack(side='left', padx=8)
+
+        # Popup duration (only visible when popup is selected)
+        self.dur_value, self.dur_row = make_setting_row(
+            settings_frame, "Popup Duration:", f"{self.alert_duration}s",
+            self.decrease_duration, self.increase_duration, "(how long popup stays)")
+        self._update_dur_visibility()
+
+        # Delay before alert fires
+        self.delay_value, _ = make_setting_row(
+            settings_frame, "Delay:", f"{self.alert_delay}s",
+            self.decrease_delay, self.increase_delay, "(seconds before alert fires)")
 
         # Posture checks with per-check thresholds
         checks_frame = tk.LabelFrame(
@@ -501,11 +505,11 @@ class PostureGuardian:
         self.check_vars = {}
         self.threshold_labels = {}
         check_info = {
-            'shoulders':    ('Uneven Shoulders',  'One shoulder higher than the other'),
-            'neck':         ('Neck Strain',       'Neck bending too far forward or to the side'),
-            'head_forward': ('Leaning Forward',   'Leaning toward screen, shoulders ahead of hips'),
-            'torso':        ('Torso Lean',        'Upper body tilting forward from the hips'),
-            'spine':        ('Spine Slouch',      'Sinking down in chair, spine compressing'),
+            'shoulders':    ('Uneven shoulders',      'One shoulder higher than the other'),
+            'neck':         ('Neck bent',             'Head tilting forward or sideways'),
+            'head_forward': ('Too close to screen',   'Body leaning toward the monitor'),
+            'torso':        ('Leaning to one side',   'Upper body not centered'),
+            'spine':        ('Sinking down',          'Spine curving, losing height'),
         }
         for key, (label, desc) in check_info.items():
             # Checkbox + description row
@@ -522,10 +526,10 @@ class PostureGuardian:
                 font=('Helvetica', 11)
             ).pack(side='left')
 
-            # Threshold +/- buttons
+            # Threshold +/- buttons (packed right-to-left, so + first then label then -)
             tk.Button(
-                row, text="-", font=('Helvetica', 10, 'bold'),
-                command=lambda k=key: self.adjust_threshold(k, -1),
+                row, text="+", font=('Helvetica', 12, 'bold'),
+                command=lambda k=key: self.adjust_threshold(k, 1),
                 bg='white', fg='#667eea', width=2, cursor='hand2'
             ).pack(side='right', padx=2)
 
@@ -537,8 +541,8 @@ class PostureGuardian:
             self.threshold_labels[key] = thresh_label
 
             tk.Button(
-                row, text="+", font=('Helvetica', 10, 'bold'),
-                command=lambda k=key: self.adjust_threshold(k, 1),
+                row, text="-", font=('Helvetica', 12, 'bold'),
+                command=lambda k=key: self.adjust_threshold(k, -1),
                 bg='white', fg='#667eea', width=2, cursor='hand2'
             ).pack(side='right', padx=2)
 
@@ -597,7 +601,26 @@ class PostureGuardian:
         """Switch between sound and popup alert types"""
         self.alert_type = 'popup' if self.alert_type == 'sound' else 'sound'
         self.alert_type_label.config(text=self.alert_type.capitalize())
+        self._update_dur_visibility()
         self.save_calibration()
+
+    def _update_dur_visibility(self):
+        """Show/hide popup duration row based on alert type"""
+        for child in self.dur_row.winfo_children():
+            if self.alert_type == 'popup':
+                child.configure(state='normal')
+            else:
+                try:
+                    child.configure(state='disabled')
+                except:
+                    pass
+        # Dim the row when not applicable
+        fg = 'white' if self.alert_type == 'popup' else '#667eea'
+        for child in self.dur_row.winfo_children():
+            try:
+                child.configure(fg=fg)
+            except:
+                pass
 
     def toggle_check(self, key):
         """Toggle a posture check on/off"""
